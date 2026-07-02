@@ -1,0 +1,23 @@
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+
+# Env files (never commit real secrets)
+.env
+frontend/.env
+backend/.env
+!*.env.example
+
+# Editor
+.vscode/
+.DS_Store
+
+# Logs
+*.log
