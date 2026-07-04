@@ -1,7 +1,7 @@
 import axios from "axios";
 import type { BulletPointRequest, BulletPointResponse } from "../types/bulletPoint";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 /**
  * Calls the backend to improve a resume bullet point.
