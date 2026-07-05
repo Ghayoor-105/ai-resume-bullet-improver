@@ -1,4 +1,5 @@
 import { useState } from "react";
+import axios from "axios";
 import BulletPointForm from "./components/BulletPointForm";
 import ResultCard from "./components/ResultCard";
 import ErrorMessage from "./components/ErrorMessage";
@@ -20,10 +21,21 @@ function App() {
     try {
       const response = await improveBulletPoint(text);
       setResult(response);
-    } catch {
-      setError(
-        "Something went wrong while improving your bullet point. Please try again."
-      );
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response) {
+        const status = err.response.status;
+        const detail = err.response.data?.detail;
+
+        if (status === 429) {
+          setError(detail ?? "Daily AI request limit reached. Please try again tomorrow.");
+        } else if (status === 503) {
+          setError(detail ?? "The AI service is temporarily overloaded. Please try again shortly.");
+        } else {
+          setError("Something went wrong while improving your bullet point. Please try again.");
+        }
+      } else {
+        setError("Something went wrong while improving your bullet point. Please try again.");
+      }
       setResult(null);
     } finally {
       setIsLoading(false);

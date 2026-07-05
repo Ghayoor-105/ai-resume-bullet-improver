@@ -3,7 +3,11 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.schemas.bullet_point import BulletPointRequest, BulletPointResponse
-from app.services.gemini_service import improve_bullet_point
+from app.services.gemini_service import (
+    improve_bullet_point,
+    RateLimitError,
+    AIServiceUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +22,16 @@ def improve_bullet_point_endpoint(payload: BulletPointRequest) -> BulletPointRes
     """
     try:
         return improve_bullet_point(payload.original_text)
+    except RateLimitError as e:
+        raise HTTPException(
+            status_code=429,
+            detail="This demo has reached its daily AI request limit. Please try again tomorrow.",
+        ) from e
+    except AIServiceUnavailableError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="The AI service is temporarily overloaded. Please try again in a moment.",
+        ) from e
     except ValueError as e:
         logger.error("AI response validation failed: %s", e)
         raise HTTPException(

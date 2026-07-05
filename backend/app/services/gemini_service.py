@@ -2,6 +2,7 @@ import json
 import logging
 
 from google import genai
+from google.genai import errors as genai_errors
 
 from app.core.config import settings
 from app.schemas.bullet_point import BulletPointResponse
@@ -9,6 +10,17 @@ from app.schemas.bullet_point import BulletPointResponse
 logger = logging.getLogger(__name__)
 
 _client = genai.Client(api_key=settings.gemini_api_key)
+
+
+class RateLimitError(Exception):
+    """Raised when Gemini's free-tier request quota has been exhausted."""
+    pass
+
+
+class AIServiceUnavailableError(Exception):
+    """Raised when Gemini's API is temporarily overloaded or unreachable."""
+    pass
+
 
 SYSTEM_INSTRUCTIONS = """\
 You are an expert resume writing coach. You improve weak resume bullet \
@@ -19,7 +31,7 @@ Rules you must follow:
 percentages, dollar amounts) that are not present in the original text.
 2. Preserve and build on every piece of concrete information already \
 present in the original text (what was done, for whom, using what tools \
-or context) — do not remove or generalize away real details the user \
+or context) - do not remove or generalize away real details the user \
 already gave you. Your job is to elevate the language, not shorten the \
 content.
 3. Use strong, professional action verbs (e.g. "Led", "Architected", \
@@ -29,8 +41,8 @@ content.
 with no further context), improve the verb and phrasing, and you may \
 add a plausible general outcome phrase only if it uses non-specific, \
 non-fabricated language (e.g. "to meet project goals" or "to support \
-business objectives") — never invent specific numbers or named outcomes.
-5. Keep the improved bullet point to one sentence, ideally 12-25 words — \
+business objectives") - never invent specific numbers or named outcomes.
+5. Keep the improved bullet point to one sentence, ideally 12-25 words - \
 detailed enough to feel substantive, not just a trimmed fragment.
 6. Respond ONLY with valid JSON matching this exact structure, no extra \
 commentary, no markdown code fences:
@@ -48,17 +60,27 @@ def improve_bullet_point(original_text: str) -> BulletPointResponse:
     structured, validated improvement.
 
     Raises:
+        RateLimitError: if Gemini's free-tier quota is exhausted.
+        AIServiceUnavailableError: if Gemini is temporarily overloaded.
         ValueError: if Gemini's response isn't valid JSON matching our schema.
-        Exception: for underlying API/network failures (handled by caller).
     """
     prompt = f'{SYSTEM_INSTRUCTIONS}\n\nOriginal bullet point:\n"{original_text}"'
 
     logger.info("Sending bullet point improvement request to Gemini")
 
-    response = _client.models.generate_content(
-        model=settings.gemini_model,
-        contents=prompt,
-    )
+    try:
+        response = _client.models.generate_content(
+            model=settings.gemini_model,
+            contents=prompt,
+        )
+    except genai_errors.ClientError as e:
+        if e.code == 429:
+            logger.warning("Gemini rate limit exceeded")
+            raise RateLimitError("Daily AI request limit reached") from e
+        raise
+    except genai_errors.ServerError as e:
+        logger.warning("Gemini service temporarily unavailable: %s", e)
+        raise AIServiceUnavailableError("AI service is temporarily overloaded") from e
 
     raw_text = response.text.strip()
     cleaned_text = _strip_markdown_fences(raw_text)
@@ -79,8 +101,8 @@ def _strip_markdown_fences(text: str) -> str:
     """
     if text.startswith("```"):
         lines = text.split("\n")
-        lines = lines[1:]  # drop the opening ``` or ```json line
+        lines = lines[1:]
         if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]  # drop the closing ``` line
+            lines = lines[:-1]
         text = "\n".join(lines)
     return text.strip()
